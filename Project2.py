@@ -1,0 +1,203 @@
+import pandas as pd
+import warnings
+warnings.filterwarnings('ignore')
+
+data = pd.read_csv('Placement.csv')
+
+# ======= DATA EXPLORATION =======
+print("Number of Rows", data.shape[0])
+print("Number of Columns", data.shape[1])
+data.info()
+data.isnull().sum()
+data.describe()
+
+# ======= DATA PREPROCESSING =======
+data = data.drop(['sl_no','salary'], axis=1)
+
+data['ssc_b'] = data['ssc_b'].map({'Central':1,'Others':0})
+data['hsc_b'] = data['hsc_b'].map({'Central':1,'Others':0})
+data['hsc_s'] = data['hsc_s'].map({'Science':2,'Commerce':1,'Arts':0})
+data['degree_t'] = data['degree_t'].map({'Sci&Tech':2,'Comm&Mgmt':1,'Others':0})
+data['specialisation'] = data['specialisation'].map({'Mkt&HR':1,'Mkt&Fin':0})
+data['workex'] = data['workex'].map({'Yes':1,'No':0})
+data['status'] = data['status'].map({'Placed':1,'Not Placed':0})
+
+X = data.drop('status', axis=1)
+y = data['status']
+
+# ======= TRAIN TEST SPLIT =======
+from sklearn.model_selection import train_test_split
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.20, random_state=42)
+
+# ======= MODEL TRAINING =======
+from sklearn.linear_model import LogisticRegression
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn import svm
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+
+lr = LogisticRegression()
+lr.fit(X_train, y_train)
+
+svm_model = svm.SVC()
+svm_model.fit(X_train, y_train)
+
+knn = KNeighborsClassifier()
+knn.fit(X_train, y_train)
+
+dt = DecisionTreeClassifier()
+dt.fit(X_train, y_train)
+
+rf = RandomForestClassifier()
+rf.fit(X_train, y_train)
+
+gb = GradientBoostingClassifier()
+gb.fit(X_train, y_train)
+
+# ======= MODEL ACCURACIES =======
+from sklearn.metrics import accuracy_score
+
+scores = [
+    accuracy_score(y_test, lr.predict(X_test)),
+    accuracy_score(y_test, svm_model.predict(X_test)),
+    accuracy_score(y_test, knn.predict(X_test)),
+    accuracy_score(y_test, dt.predict(X_test)),
+    accuracy_score(y_test, rf.predict(X_test)),
+    accuracy_score(y_test, gb.predict(X_test))
+]
+
+print(scores)
+
+final_data = pd.DataFrame({
+    'Models': ['LR','SVC','KNN','DT','RF','GB'],
+    'ACC': [s*100 for s in scores]
+})
+
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+sns.barplot(x=final_data['Models'], y=final_data['ACC'])
+plt.show()
+
+# ======= SAVE LOGISTIC REGRESSION MODEL =======
+import joblib
+joblib.dump(lr, 'model_campus_placement')
+
+# ======= GUI =======
+from tkinter import *
+import tkinter.font as font
+
+# Load trained model once
+model = joblib.load('model_campus_placement')
+
+def show_entry_fields():
+    try:
+        # Validate dropdowns and entries
+        if (not clicked.get() or not clicked1.get() or not clicked2.get() or 
+            not clicked3.get() or not clicked4.get() or not clicked5.get() or not clicked6.get() or
+            not e2.get() or not e4.get() or not e7.get() or not e10.get() or not e12.get()):
+            result_label.config(text="Please fill in all fields!", fg="orange")
+            return
+
+        # Encode inputs from dropdowns and entries
+        p1 = 1 if clicked.get() == "Male" else 0
+        p2 = float(e2.get())
+        p3 = 1 if clicked1.get() == "Central" else 0
+        p4 = float(e4.get())
+        p5 = 1 if clicked6.get() == "Central" else 0
+
+        p6_map = {"Science": 2, "Commerce": 1, "Arts": 0}
+        p6 = p6_map.get(clicked2.get(), 0)
+
+        p7 = float(e7.get())
+
+        p8_map = {"Sci&Tech": 2, "Comm&Mgmt": 1, "Others": 0}
+        p8 = p8_map.get(clicked3.get(), 0)
+
+        p9 = 1 if clicked4.get() == "Yes" else 0
+        p10 = float(e10.get())
+        p11 = 1 if clicked5.get() == "Mkt&HR" else 0
+        p12 = float(e12.get())
+
+        # Create dataframe for prediction
+        new_data = pd.DataFrame({
+            'gender':[p1],
+            'ssc_p':[p2],
+            'ssc_b':[p3],
+            'hsc_p':[p4],
+            'hsc_b':[p5],
+            'hsc_s':[p6],
+            'degree_p':[p7],
+            'degree_t':[p8],
+            'workex':[p9],
+            'etest_p':[p10],
+            'specialisation':[p11],
+            'mba_p':[p12]
+        })
+
+        # Predict placement
+        result = model.predict(new_data)[0]
+        prob = round(model.predict_proba(new_data)[0][1]*100,2)
+
+        # Update the result label dynamically
+        if result == 0:
+            result_label.config(text="Student Cannot Be Placed", fg="red")
+        else:
+            result_label.config(text=f"Student Will Be Placed with Probability: {prob}%", fg="green")
+
+    except ValueError:
+        result_label.config(text="Please enter valid numeric inputs!", fg="orange")
+
+# ===================== GUI =====================
+master = Tk()
+master.title("Campus Placement Prediction System")
+master.geometry("600x550")  # Optional: Set window size
+
+# Heading
+Label(master, text="Campus Placement Prediction System",
+      bg="green", fg="white", font=("Arial", 20)).grid(row=0, columnspan=2, pady=10)
+
+# Labels
+labels_text = ["Gender", "10th %", "10th Board",
+               "12th %", "12th Board",
+               "12th Stream", "Degree %", "Degree Type",
+               "Work Experience", "E-test %", "MBA Specialisation", "MBA %"]
+
+for i, text in enumerate(labels_text):
+    Label(master, text=text, font=("Arial", 15)).grid(row=i+1, column=0, sticky=W, padx=5, pady=5)
+
+# Dropdown variables
+clicked = StringVar()
+clicked1 = StringVar()
+clicked2 = StringVar()
+clicked3 = StringVar()
+clicked4 = StringVar()
+clicked5 = StringVar()
+clicked6 = StringVar()
+
+# Dropdowns and entries
+OptionMenu(master, clicked, "Male", "Female").grid(row=1, column=1)
+e2 = Entry(master); e2.grid(row=2, column=1)
+OptionMenu(master, clicked1, "Central", "Others").grid(row=3, column=1)
+e4 = Entry(master); e4.grid(row=4, column=1)
+OptionMenu(master, clicked6, "Central", "Others").grid(row=5, column=1)
+OptionMenu(master, clicked2, "Science", "Commerce", "Arts").grid(row=6, column=1)
+e7 = Entry(master); e7.grid(row=7, column=1)
+OptionMenu(master, clicked3, "Sci&Tech", "Comm&Mgmt", "Others").grid(row=8, column=1)
+OptionMenu(master, clicked4, "Yes", "No").grid(row=9, column=1)
+e10 = Entry(master); e10.grid(row=10, column=1)
+OptionMenu(master, clicked5, "Mkt&HR", "Mkt&Fin").grid(row=11, column=1)
+e12 = Entry(master); e12.grid(row=12, column=1)
+
+# Predict Button
+buttonFont = font.Font(family='Helvetica', size=16, weight='bold')
+Button(master, text='Predict', height=1, width=10,
+       activebackground='#00ff00', font=buttonFont, bg='black', fg='white',
+       command=show_entry_fields).grid(row=13, columnspan=2, pady=15)
+
+# Result label (dynamic)
+result_label = Label(master, text="", font=("Arial", 16))
+result_label.grid(row=14, columnspan=2, pady=10)
+
+# Start GUI loop
+master.mainloop()
